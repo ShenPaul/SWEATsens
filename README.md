@@ -7,6 +7,7 @@ Contains Arduino Code for the board and the Flutter app for communicating with t
 Currently contains code from:
 
 https://github.com/lupyuen/flutter-blue-sample
+
 https://github.com/lmarceau/flutter-bluetooth
 
 as well as Arduino examples.
