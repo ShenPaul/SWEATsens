@@ -2,19 +2,23 @@
 # https://bleak.readthedocs.io/en/latest/api/index.html
 # https://medium.com/analytics-vidhya/using-numpy-efficiently-between-processes-1bee17dcb01
 
-# import libraries
+# import statements
+import sys
 import serial
+import serial.tools.list_ports
 from datetime import datetime
+import time
+import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
-from functools import partial
-import numpy as np
 import csv
 from tkinter import *
 from threading import Thread
 from queue import Queue
+
+# from matplotlib.animation import FuncAnimation
+# from functools import partial
 
 # plotting in tkinter
 matplotlib.use("tkAgg")
@@ -51,8 +55,6 @@ def log_start(btn, ser, val="1"):
     print("Logging started.")
     btn.config(bg='green')
 
-    return 1
-
 
 def stim_start(btn, ser, val="3.3"):
     # this function starts stimulating the skin
@@ -66,7 +68,6 @@ def stim_start(btn, ser, val="3.3"):
     # output and set button colour
     print("Stimulation started.")
     btn.config(bg='green')
-    return 1
 
 
 def sens_start(btn, ser, val="0.6"):
@@ -81,7 +82,6 @@ def sens_start(btn, ser, val="0.6"):
     # output and set button colour
     print("Electrode powered.")
     btn.config(bg='green')
-    return 1
 
 
 def test_start(btn, ser, val="1"):
@@ -93,8 +93,6 @@ def test_start(btn, ser, val="1"):
     # output and set button colour
     print("Testing mode.")
     btn.config(bg='green')
-
-    return 1
 
 
 def log_stop(btn, ser, val="0"):
@@ -109,7 +107,6 @@ def log_stop(btn, ser, val="0"):
     # output and reset button colour
     print("Logging stopped.")
     btn.config(bg='SystemButtonFace')
-    return 1
 
 
 def stim_stop(btn, ser, val="0"):
@@ -120,7 +117,6 @@ def stim_stop(btn, ser, val="0"):
     # output and reset button colour
     print("Stimulation stopped.")
     btn.config(bg='SystemButtonFace')
-    return 1
 
 
 def sens_stop(btn, ser, val="0"):
@@ -131,7 +127,6 @@ def sens_stop(btn, ser, val="0"):
     # output and reset button colour
     print("Electrode unpowered.")
     btn.config(bg='SystemButtonFace')
-    return 1
 
 
 def test_stop(btn, ser, val="0"):
@@ -142,7 +137,6 @@ def test_stop(btn, ser, val="0"):
     # output and reset button colour
     print("Normal mode.")
     btn.config(bg='SystemButtonFace')
-    return 1
 
 
 def logging(ser):
@@ -167,14 +161,18 @@ def logging(ser):
         # print data
         print(decoded_bytes)
 
+        # check if there is a comma separator
+        # process if there is, pass if there is not
         if ',' in decoded_bytes:
 
             # convert data a list
             txt = decoded_bytes.split(',')
 
+            # write times to a queue as a float
             global time_q
             time_q.put(float(txt[0]))
 
+            # write voltages to a queue as a float
             global val_q
             val_q.put(float(txt[1]))
 
@@ -186,27 +184,32 @@ def logging(ser):
 
 
 def plot():
-
+    # this function creates a new window that plots the data just logged
     # Toplevel object which will be treated as a new window
     plot_window = Toplevel(window)
 
-    # sets the title of the
-    # Toplevel widget
+    # set title
     plot_window.title("Plotting")
 
-    # sets the geometry of toplevel
+    # sets the geometry
     plot_window.geometry("400x400")
 
+    # define a window closing protocol
+    plot_window.protocol("WM_DELETE_WINDOW", lambda: on_closing(plot_window))
+
+    # begin plotting
     fig, ax = plt.subplots()
 
-    x_time = list(time_q.queue)
-
-    y_val = list(val_q.queue)
+    # create the x and y data from the collected data in the queue
+    x_time = np.array(list(time_q.queue))
+    y_val = np.array(list(val_q.queue))
 
     # print(x, y)
 
-    ax.plot(x_time, y_val)
+    # plot the data
+    ax.plot(x_time/1000/60, y_val)
 
+    # the below code is for animations, but it is not necessary
     # line1, = ax.plot([], [], 'ro')
     #
     # def init():
@@ -231,29 +234,106 @@ def plot():
     #     init_func=init,
     #     blit=True)
 
+    # this will autoscale the plot to have the correct axes limits
     plt.autoscale()
+
+    # format the plot
+    ax.set_xlabel("Time (min)")
+    ax.set_xlabel("Voltage (V)")
+    ax.set_title("Electrode Voltage")
 
     fig.set_size_inches(5, 5)
 
-    # creating the Tkinter canvas
-    # containing the Matplotlib figure
+    # create the tkinter canvas for the figure
     canvas = FigureCanvasTkAgg(fig, master=plot_window)
     canvas.draw()
 
-    # placing the canvas on the Tkinter window
+    # place the canvas in the window
     canvas.get_tk_widget().pack()
 
-    # creating the Matplotlib toolbar
+    # create the toolbar
     toolbar = NavigationToolbar2Tk(canvas, plot_window)
     toolbar.update()
 
-    # placing the toolbar on the Tkinter window
+    # place the toolbar in the window
     canvas.get_tk_widget().pack()
 
+    # this will produce a separate plot
     # plt.show()
 
 
+def on_closing(box):
+    # this function defines what happens when the plotting window is closed
+    # close the plot so it doesn't run in the background
+    plt.close('all')
+
+    # close the window
+    box.destroy()
+
+
+def force_closing(box):
+    # stop the program
+    box.destroy()
+    sys.exit("No Arduino connected!")
+
+
+def check_presence(correct_port, interval=0.1):
+    # this function checks if the arduino is connected and terminated the program if it is diconnected
+    # while loop to check
+    while True:
+
+        # get the available ports
+        myports = [tuple(p) for p in list(serial.tools.list_ports.comports())]
+
+        # if the desired port is not present
+        if correct_port not in myports:
+
+            # output
+            print("Arduino has been disconnected!")
+
+            # create popup window
+            top = Toplevel(window)
+            top.geometry("250x50")
+            top.title("Error")
+            label = Label(top, text="Arduino disconnected!", font=("Times New Roman", 18, "bold"))
+            label.pack()
+
+            # set window exit protocol
+            top.protocol("WM_DELETE_WINDOW", lambda: force_closing(window))
+
+            break
+        # wait 0.1s between checking
+        time.sleep(interval)
+
+
 def main():
+
+    # this starts and gets the list of ports
+    myports = [tuple(p) for p in list(serial.tools.list_ports.comports())]
+
+    # see if arduino is connected
+    try:
+        arduino_port = [port for port in myports if 'COM4' in port][0]
+
+        # start checking thread if it is
+        port_controller = Thread(target=check_presence, args=(arduino_port, 0.1,))
+        port_controller.setDaemon(True)
+        port_controller.start()
+
+    # otherwise raise an error and stop the program
+    except:
+        # create popup window
+        window.geometry("250x50")
+        window.title("Error")
+        label = Label(window, text="No Arduino connected!", font=("Times New Roman", 18, "bold"))
+        label.pack()
+
+        # terminate program on window close
+        window.protocol("WM_DELETE_WINDOW", lambda: force_closing(window))
+
+        # start loop
+        window.mainloop()
+
     # define serial port and baud rate
     # find the 'COM#' in the Windows Device Manager
     ser = serial.Serial('COM4', 9600, timeout=1)
