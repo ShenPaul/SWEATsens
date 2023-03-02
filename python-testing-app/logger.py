@@ -34,11 +34,11 @@ val_q = Queue()
 window = Tk()
 
 
-def log_start(btn, ser, val="1"):
+def log_start(btn, ser, val="500"):
     # this function starts logging
     # set a default interval if none is given
     if val is None:
-        val = "1"
+        val = "500"
 
     # send message to arduino
     ser.write(("3," + val).encode('utf-8'))

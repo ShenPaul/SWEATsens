@@ -26,14 +26,18 @@ BLEByteCharacteristic switchCharacteristic("2b6a5170-b7f2-11ed-b9d9-0800200c9a66
 
 // define pins
 const int ledPin = LED_BUILTIN; // pin to use for the LED
+const int redPin = 22; // other LEDs
+const int bluePin = 24;     
+const int greenPin = 23;
+const int pwrledPin = 25;
 const int stimPin = 9; // pin to use for stimulation electrode output
 const int sensorInPin = A0; // pin to use for the electrode circuit input
 const int sensorOutPin = 8; // pin to use for the electrode circuit output
 
 // variables to determine actions to take
 int ledState = 0;
-int stimState = 0;
-int sensorState = 0;
+float stimState = 0;
+float sensorState = 0;
 int loggingState = 0;
 int testing = 0;
 float voltage = 0;
@@ -56,6 +60,10 @@ void setup() {
   pinMode(stimPin, OUTPUT);
   pinMode(sensorInPin, INPUT);
   pinMode(sensorOutPin, OUTPUT);
+  pinMode(redPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(pwrledPin, OUTPUT);
 
   // begin initialization
   if (!BLE.begin()) {
@@ -94,96 +102,108 @@ void setup() {
 // this is the main loop of the program, which continuously loops
 void loop() {
 
-// first check the states and perform actions accordingly
-// if there is sweat stimulation required
-if (stimState > 0){
+  // first check the states and perform actions accordingly
+  // if there is sweat stimulation required
+  if (stimState > 0){
 
-  // calculate the PWM value
-  int stimV = round(stimState/3.3 * 255);
-  
-  // set pin to output PWM
-  analogWrite(stimPin, stimV);
+    // calculate the PWM value
+    int stimV = round(stimState/3.3 * 255);
+    
+    // set pin to output PWM
+    analogWrite(stimPin, stimV);
 
-// otherwise turn the pin off
-} else {
+    // turn on LED for indicator
+    digitalWrite(redPin, LOW);
 
-  // write 0 to the pin
-  analogWrite(stimPin, 0);
-}
+  // otherwise turn the pin off
+  } else {
 
-// if there is electrode volatage required
-if (sensorState > 0){
+    // write 0 to the pin
+    analogWrite(stimPin, 0);
 
-  // calculate the PWM value
-  int sensorV = round(sensorState/3.3 * 255);
-  
-  // set pin to output PWM
-  analogWrite(sensorOutPin, sensorV);
+    // turn LED off
+    digitalWrite(redPin, HIGH);
+  }
 
-// otherwise turn the pin off
-} else {
+  // if there is electrode volatage required
+  if (sensorState > 0){
 
-  // write 0 to the pin
-  analogWrite(sensorOutPin, 0);
-}
+    // calculate the PWM value
+    int sensorV = round(sensorState/3.3 * 255);
+    
+    // set pin to output PWM
+    analogWrite(sensorOutPin, sensorV);
 
-// if logging is requested
-if (loggingState > 0) {
+    // turn on LED for indicator
+    digitalWrite(greenPin, LOW);
 
-  // update the desired logging interval
+  // otherwise turn the pin off
+  } else {
+
+    // write 0 to the pin
+    analogWrite(sensorOutPin, 0);
+    
+    // turn LED off
+    digitalWrite(greenPin, HIGH);
+  }
+
+  // if logging is requested
   if (loggingState > 1) {
+
+    // update the desired logging interval
     interval = loggingState;
-  }
 
-  // if there is no logging start time
-  if (startLogMillis == 0) {
+    // if there is no logging start time
+    if (startLogMillis == 0) {
 
-    // update the logging start time
-    startLogMillis = millis();
-    previousMillis = startLogMillis;
-  }
+      // update the logging start time
+      startLogMillis = millis();
+      previousMillis = startLogMillis;
+    }
 
-  // log data using millis
-  // get current time
-  unsigned long currentMillis = millis();
+    // log data using millis
+    // get current time
+    unsigned long currentMillis = millis();
 
-  // check if enough time has passed between readings
-  if (currentMillis - previousMillis > interval) {
+    // check if enough time has passed between readings
+    if (currentMillis - previousMillis > interval) {
 
-    // update previous time if enough time has passed
-    previousMillis = currentMillis;
-
-    // get a reading
-    if (ledState == LOW) {
-
-      // turn on LED
-      ledState = HIGH;
+      // update previous time if enough time has passed
+      previousMillis = currentMillis;
 
       // read the analog signal
-      int sensorValue = analogRead(A0);
+      float sensorValue = analogRead(A0);
 
       // convert the analog reading (0 - 1023) to a voltage (0 - 3.3V):
       voltage = sensorValue * (3.3 / 1023.0);
 
-    } else {
+      ledState = HIGH;
+      digitalWrite(ledPin, ledState);
 
-      // otherwise if currently not getting a reading, turn the the LED off
-      ledState = LOW;
+      // output if there is a serial connection
+      if (Serial) {
+        // format 
+        Serial.print(millis());
+        Serial.print(',');
+        Serial.println(voltage);
+      }
+      
     }
 
-    // update LED state
+  } else {
+
+      // only reset to 0 if testing is not happening below
+      if (loggingState == 0) {
+        // otherwise turn off logging
+        startLogMillis = 0;
+        previousMillis = 0;
+      }
+    
+    // turn LED off
+    ledState = LOW;
     digitalWrite(ledPin, ledState);
+
   }
-
-} else {
-
-  // otherwise turn off logging
-  startLogMillis = 0;
-  previousMillis = 0;
-  ledState = LOW;
-  digitalWrite(ledPin, ledState);
-
-}
 
   // next listen for BLE peripherals
   BLEDevice central = BLE.central();
@@ -204,10 +224,10 @@ if (loggingState > 0) {
       if (switchCharacteristic.written()) {
         if (switchCharacteristic.value()) {   // any value other than 0
           Serial.println("LED on");
-          digitalWrite(ledPin, HIGH);         // will turn the LED on
+          digitalWrite(bluePin, LOW);         // will turn the LED on
         } else {                              // a 0 value
           Serial.println(F("LED off"));
-          digitalWrite(ledPin, LOW);          // will turn the LED off
+          digitalWrite(bluePin, HIGH);          // will turn the LED off
         }
       }
     }
@@ -236,7 +256,7 @@ if (loggingState > 0) {
 
       // split the string into the function and value
       int func = teststr.substring(0,commaInd).toInt();
-      int val = teststr.substring(commaInd+1).toInt();
+      float val = teststr.substring(commaInd+1).toFloat();
 
       // update the functions based on the values
       if (func == 0) {
@@ -251,13 +271,16 @@ if (loggingState > 0) {
         sensorState = val;
       }
 
-    }     
-
+    }
 
     // if in testing mode, output a random value every 500ms
     if (testing) {
 
-       unsigned long currentMillis = millis();
+      // turn LED on
+      digitalWrite(bluePin, LOW);
+
+      // get current time
+      unsigned long currentMillis = millis();
 
       // check if enough time has passed between readings
       if (currentMillis - previousMillis > interval) {
@@ -265,50 +288,27 @@ if (loggingState > 0) {
         // update previous time if enough time has passed
         previousMillis = currentMillis;
 
-        // get a reading
-        if (ledState == LOW) {
+        // generate random voltage
+        voltage = random(3300)/1000.0;
 
-          // turn on LED
-          ledState = HIGH;
-
-          // generate random voltage
-          voltage = random(3300)/1000.0;
-
-          // output to serial
-          Serial.print(millis());
-          Serial.print(',');
-          Serial.println(voltage);
-
-        } else {
-
-          // otherwise if currently not getting a reading, turn the the LED off
-          ledState = LOW;
-        }
-
-        // update LED state
-        digitalWrite(ledPin, ledState);
-
-      } else {
-
-        // otherwise turn off logging
-        startLogMillis = 0;
-        previousMillis = 0;
-        ledState = LOW;
-        digitalWrite(ledPin, ledState);
+        // output to serial
+        Serial.print(millis());
+        Serial.print(',');
+        Serial.println(voltage);
 
       }
 
     } else {
 
-      // if currently logging
-      if (loggingState > 0) {
-
-        // format 
-        Serial.print(millis());
-        Serial.print(',');
-        Serial.println(voltage);
+      // only reset to 0 if logging is not happening above
+      if (loggingState == 0) {
+        // otherwise turn off logging
+        startLogMillis = 0;
+        previousMillis = 0;
       }
-    }
 
+      // turn LED off
+      digitalWrite(bluePin, HIGH);
+    }
   }
 }
