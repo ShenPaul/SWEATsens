@@ -29,7 +29,7 @@ const int ledPin = LED_BUILTIN; // pin to use for the LED
 const int redPin = 22; // other LEDs
 const int bluePin = 24;     
 const int greenPin = 23;
-const int pwrledPin = 25;
+const int pwrledPin = LED_PWR; //pin 25
 const int stimPin = 9; // pin to use for stimulation electrode output
 const int sensorInPin = A0; // pin to use for the electrode circuit input
 const int sensorOutPin = 8; // pin to use for the electrode circuit output
@@ -101,6 +101,9 @@ void setup() {
 
 // this is the main loop of the program, which continuously loops
 void loop() {
+
+  // turn on power pin
+  digitalWrite(pwrledPin, HIGH);
 
   // first check the states and perform actions accordingly
   // if there is sweat stimulation required

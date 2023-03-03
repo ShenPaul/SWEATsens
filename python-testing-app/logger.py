@@ -37,7 +37,7 @@ window = Tk()
 def log_start(btn, ser, val="500"):
     # this function starts logging
     # set a default interval if none is given
-    if val is None:
+    if val == '' or val is None:
         val = "500"
 
     # send message to arduino
@@ -59,7 +59,7 @@ def log_start(btn, ser, val="500"):
 def stim_start(btn, ser, val="3.3"):
     # this function starts stimulating the skin
     # set a default stimulation voltage if none is given
-    if val is None:
+    if val == '' or val is None:
         val = "3.3"
 
     # send message to arduino
@@ -73,7 +73,7 @@ def stim_start(btn, ser, val="3.3"):
 def sens_start(btn, ser, val="0.6"):
     # this function starts supplying the electrode with power
     # set a default electrode voltage if none is given
-    if val is None:
+    if val == '' or val is None:
         val = "0.6"
 
     # send message to arduino
@@ -192,7 +192,7 @@ def plot():
     plot_window.title("Plotting")
 
     # sets the geometry
-    plot_window.geometry("400x400")
+    plot_window.geometry("500x600")
 
     # define a window closing protocol
     plot_window.protocol("WM_DELETE_WINDOW", lambda: on_closing(plot_window))
@@ -239,7 +239,7 @@ def plot():
 
     # format the plot
     ax.set_xlabel("Time (min)")
-    ax.set_xlabel("Voltage (V)")
+    ax.set_ylabel("Voltage (V)")
     ax.set_title("Electrode Voltage")
 
     fig.set_size_inches(5, 5)
