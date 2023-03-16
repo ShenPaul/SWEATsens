@@ -32,7 +32,7 @@ const char* peripheralName = "SWEATsens";
 
 typedef struct btOut_type{
   unsigned long timeOut;
-  float voltOut;
+  uint16_t voltOut;
 };
 
 const int union_size = sizeof(btOut_type);
@@ -59,7 +59,7 @@ BLEByteCharacteristic endCharacteristic(endCharacteristicUuid, BLERead | BLEWrit
 // define pins
 const int ledPin = LED_BUILTIN; // pin to use for the LED
 const int redPin = 22; // other LEDs
-const int bluePin = 24;     
+const int bluePin = 24;
 const int greenPin = 23;
 const int pwrledPin = LED_PWR; //pin 25
 const int stimPin = 9; // pin to use for stimulation electrode output
@@ -86,7 +86,7 @@ float stimState = 0;
 float sensorState = 0;
 int loggingState = 1;
 int testing = 0;
-float voltage = 0;
+uint16_t voltage = 0;
 unsigned long previousMillis = 0;
 unsigned long startMillis = 0;
 unsigned long startLogMillis = 0;
@@ -95,7 +95,7 @@ unsigned long interval = 2000;
 
 void startStim(float stimState) {
     // calculate the PWM value
-    int stimV = floor(stimState/3.3 * 255);
+    uint16_t stimV = floor(stimState/3.3 * 255); // change this from int to uint16_t
     
     // set pin to output PWM
     analogWrite(stimPin, stimV);
@@ -104,26 +104,30 @@ void startStim(float stimState) {
     // floor the outputs to ensure a max of 4096
     stimV = floor(4096*stimState/2/2.048);
 
+    // calcuate the bits to write to the register
+    // byte firstB = stimV/256; // first 4 bits
+    // byte secondB = stimV%256; // next 8 bits
+
+    uint16_t val16 = stimWrite << 12 | stimV;
+
     // start SPI transaction
     SPI.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
 
     // pull CS pin low to start transfer
     digitalWrite(csStimDac, LOW);
 
-    // calcuate the bytes to write to the register
-    byte firstB = stimV/256; // first 4 bits
-    byte secondB = stimV%256; // next 8 bits
+    uint16_t receivedVal16 = SPI.transfer16(val16);
 
     // output to DAC register
-    int receivedVal = SPI.transfer(stimWrite << 4 | firstB); //shift the write command left 4 and or it with the first byte and send it
-    receivedVal = SPI.transfer(secondB); // send the second signal
+    // int receivedVal = SPI.transfer(stimWrite << 4 | firstB); //shift the write command left 4 and or it with the first byte and send it
+    // receivedVal = SPI.transfer(secondB); // send the second signal
     SPI.endTransaction(); // end the transaction
 
     // pull CS pin high to stop transfer
     digitalWrite(csStimDac, HIGH);
 
     // output to serial just in case
-    Serial.println(receivedVal);
+    Serial.println(receivedVal16);
 
     // turn on LED for indicator
     digitalWrite(redPin, LOW);
@@ -133,6 +137,8 @@ void stopStim() {
     // write 0 to the pin
     analogWrite(stimPin, 0);
 
+    uint16_t val16 = stimWrite << 12;
+
     // start SPI transaction
     SPI.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
 
@@ -140,15 +146,17 @@ void stopStim() {
     digitalWrite(csStimDac, LOW);
 
     // output to DAC register
-    int receivedVal = SPI.transfer(stimWrite << 4); //shift the write command left 4 and pad with 0s
-    receivedVal = SPI.transfer(0b00000000); // send the second signal of 0s
+    uint16_t receivedVal16 = SPI.transfer16(val16);
+
+    //int receivedVal = SPI.transfer(stimWrite << 4); //shift the write command left 4 and pad with 0s
+    //receivedVal = SPI.transfer(0b00000000); // send the second signal of 0s
     SPI.endTransaction(); // end the transaction
 
     // pull CS pin high to stop transfer
     digitalWrite(csStimDac, HIGH);
 
     // output to serial just in case
-    Serial.println(receivedVal);
+    Serial.println(receivedVal16);
 
     // turn LED off
     digitalWrite(redPin, HIGH);
@@ -156,7 +164,7 @@ void stopStim() {
 
 void startSense(float sensorState) {
     // calculate the PWM value
-    int sensorV = round(sensorState/3.3 * 255);
+    uint16_t sensorV = round(sensorState/3.3 * 255);
     
     // set pin to output PWM
     analogWrite(sensorOutPin, sensorV);
@@ -165,26 +173,23 @@ void startSense(float sensorState) {
     // floor the outputs to ensure a max of 4096
     sensorV = floor(4096*sensorState/2.048);
 
+    uint16_t val16 = sensWrite << 12 | sensorV;
+
     // start SPI transaction
     SPI.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
 
     // pull CS pin low to start transfer
     digitalWrite(csSensDac, LOW);
 
-    // calcuate the bytes to write to the register
-    byte firstB = sensorV/256; // first 4 bits
-    byte secondB = sensorV%256; // next 8 bits
-
     // output to DAC register
-    int receivedVal = SPI.transfer(sensWrite << 4 | firstB); //shift the write command left 4 and or it with the first byte and send it
-    receivedVal = SPI.transfer(secondB); // send the second signal
+    uint16_t receivedVal16 = SPI.transfer16(val16);
     SPI.endTransaction(); // end the transaction
 
     // pull CS pin high to stop transfer
     digitalWrite(csSensDac, HIGH);
 
     // output to serial just in case
-    Serial.println(receivedVal);
+    Serial.println(receivedVal16);
 
     // turn on LED for indicator
     digitalWrite(greenPin, LOW);
@@ -194,28 +199,33 @@ void stopSense() {
     // write 0 to the pin
     analogWrite(sensorOutPin, 0);
 
-   // start SPI transaction
+    uint16_t val16 = sensWrite << 12;
+
+    // start SPI transaction
     SPI.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
 
     // pull CS pin low to start transfer
     digitalWrite(csSensDac, LOW);
 
     // output to DAC register
-    int receivedVal = SPI.transfer(sensWrite << 4); //shift the write command left 4 and pad with 0s
-    receivedVal = SPI.transfer(0b00000000); // send the second signal of 0s
+    uint16_t receivedVal16 = SPI.transfer16(val16);
     SPI.endTransaction(); // end the transaction
 
     // pull CS pin high to stop transfer
     digitalWrite(csSensDac, HIGH);
 
     // output to serial just in case
-    Serial.println(receivedVal);
+    Serial.println(receivedVal16);
     
     // turn LED off
     digitalWrite(greenPin, HIGH);
 }
 
-void startLogging(int loggingState, BLEDevice central) {
+void startLogging(uint16_t loggingState, BLEDevice central) {
+
+  ledState = HIGH;
+  digitalWrite(ledPin, ledState);
+
   // update the desired logging interval
   interval = loggingState;
 
@@ -241,19 +251,34 @@ void startLogging(int loggingState, BLEDevice central) {
     // if we ever need to change the upper limit of the input
     // https://www.arduino.cc/reference/en/language/functions/analog-io/analogreference/
     analogReadResolution(12);
-    float sensorValue = analogRead(A0);
+    uint16_t sensorValue = analogRead(A0);
 
     // convert the analog reading (0 - 4095) to a voltage (0 - 3.3V):
-    voltage = sensorValue * (3.3 / 4095);
+    // voltage = sensorValue * (3.3 / 4095);
 
-    ledState = HIGH;
-    digitalWrite(ledPin, ledState);
+    uint16_t val16 = 0;
+
+    // start SPI transaction
+    SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));
+
+    // pull CS pin low to start transfer
+    digitalWrite(csSensDac, LOW);
+
+    // output to ADC and record shifted voltage from ADC
+    uint16_t voltage = SPI.transfer16(val16);
+    SPI.endTransaction(); // end the transaction
+
+    // pull CS pin high to stop transfer
+    digitalWrite(csLogADC, HIGH);
+
+    // output to serial just in case
+    Serial.println(voltage);
     
     // output if there is a serial connection
     if (central) {
       // format 
       packet.structure.timeOut = currentMillis;
-      packet.structure.voltOut = voltage;
+      packet.structure.voltOut = sensorValue;
 
       logsCharacteristic.writeValue(packet.byteArray, sizeof packet.byteArray);
     }
@@ -263,7 +288,7 @@ void startLogging(int loggingState, BLEDevice central) {
       // format 
       Serial.print(millis());
       Serial.print(',');
-      Serial.println(voltage,4); //specify 4 digits of precision
+      Serial.println(sensorValue); //specify 4 digits of precision
     }
   }
 }
