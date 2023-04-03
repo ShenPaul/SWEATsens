@@ -67,6 +67,8 @@ const int sensorInPin = A0; // pin to use for the electrode circuit input
 const int sensorOutPin = 8; // pin to use for the electrode circuit output
 
 // pins used in SPI output
+// 3 is stim shutdown
+// 4 is sense shutdown
 const int csStimDac = 5;
 const int csSensDac = 6;
 const int csLogADC = 7;
